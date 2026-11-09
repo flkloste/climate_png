@@ -1,0 +1,18 @@
+name: Climate PNG
+version: "1.0.0"
+slug: climate_png
+description: Renders the Climate house card as /config/www/climate.png (for a camera / Android widget)
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: services
+boot: auto
+init: false
+homeassistant_api: true
+map:
+  - config:rw
+options:
+  interval: 300
+schema:
+  interval: int(30,3600)

@@ -1,0 +1,104 @@
+{%- macro zc(v) -%}{{ '#58a6ff' if v < 40 else ('#3fb950' if v < 58 else ('#e3b341' if v <= 60 else '#f85149')) }}{%- endmacro -%}
+{%- macro tc(v) -%}{{ '#79c0ff' if v < 19 else ('#e6edf3' if v < 22 else '#ffa657') }}{%- endmacro -%}
+{%- macro dc(v) -%}{{ '#3fb950' if v < -1 else ('#e3b341' if v < 1 else '#f85149') }}{%- endmacro -%}
+{%- macro ah(t, rh) -%}{{ 6.112 * (2.718281828459045 ** (17.67 * t / (t + 243.5))) * rh * 2.1674 / (273.15 + t) }}{%- endmacro -%}
+{#- ---- sensors: name, floor, temperature entity, humidity entity ---- -#}
+{%- set rooms = [
+  {'n': 'Dachboden', 'f': 'DG', 't': 'sensor.0xd44867fffe4be962_temperature', 'h': 'sensor.0xd44867fffe4be962_humidity'},
+  {'n': 'DG 2', 'f': 'DG', 't': 'sensor.0xd44867fffe4bdbea_temperature', 'h': 'sensor.0xd44867fffe4bdbea_humidity'},
+  {'n': 'Bad', 'f': 'OG', 't': 'sensor.0x08ddebfffed97b5b_temperature', 'h': 'sensor.0x08ddebfffed97b5b_humidity'},
+  {'n': 'Wäsche', 'f': 'OG', 't': 'sensor.0x8c65a3fffee571ad_temperature', 'h': 'sensor.0x8c65a3fffee571ad_humidity'},
+  {'n': 'Eltern', 'f': 'OG', 't': 'sensor.0x44e2f8fffe0fd30a_temperature', 'h': 'sensor.0x44e2f8fffe0fd30a_humidity'},
+  {'n': 'Wohnzimmer', 'f': 'EG', 't': 'sensor.0xd44867fffe2aa691_temperature', 'h': 'sensor.0xd44867fffe2aa691_humidity'},
+  {'n': 'HWR', 'f': 'EG', 't': 'sensor.0x44e2f8fffe0f633d_temperature', 'h': 'sensor.0x44e2f8fffe0f633d_humidity'},
+  {'n': 'Büro', 'f': 'EG', 't': 'sensor.0x44e2f8fffe0fd431_temperature', 'h': 'sensor.0x44e2f8fffe0fd431_humidity'}
+] -%}
+{%- set out_t = states('sensor.0x8c65a3fffee0d799_temperature') | float(none) -%}
+{%- set out_h = states('sensor.0x8c65a3fffee0d799_humidity') | float(none) -%}
+{%- set ah_s = states('sensor.thermal_comfort_aussen_absolute_humidity') | float(none) -%}
+{%- set ao = ah_s if ah_s is not none else ((ah(out_t, out_h) | float) if out_t is not none and out_h is not none else none) -%}
+{%- set hm_t = states('sensor.mittlere_temperatur') | float(none) -%}
+{%- set hm_h = states('sensor.mittlere_luftfeuchtigkeit') | float(none) -%}
+{%- set ns = namespace(rows=[]) -%}
+{%- for r in rooms -%}
+{%- set tv = states(r.t) | float(none) -%}{%- set hv = states(r.h) | float(none) -%}
+{%- set ok = tv is not none and hv is not none -%}
+{%- set av = (ah(tv, hv) | float) if ok else none -%}
+{%- set dv = (ao - av) if ok and ao is not none else none -%}
+{%- set ns.rows = ns.rows + [{'n': r.n, 'f': r.f, 't': tv, 'h': hv, 'ok': ok, 'd': dv}] -%}
+{%- endfor -%}
+{%- macro tile(x, y, w, h, r) -%}
+{%- set c = zc(r.h | float(50)) | trim if r.ok else '#6e7681' -%}
+{%- set rad = 18 -%}{%- set circ = 113.1 -%}
+{%- set frac = [[(r.h - 30) / 50, 0] | max, 1] | min if r.ok else 0 -%}
+{%- set cy = y + h / 2 + 6 -%}{%- set gx = x + 10 + rad -%}{%- set tx = x + w - 10 -%}
+<rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="9" fill="url(#glass)" stroke="{{ c }}" stroke-opacity=".55" stroke-width="1.2"/>
+{%- if r.ok and r.h > 60 -%}<rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="9" fill="none" stroke="{{ c }}" stroke-width="2" filter="url(#glow)"><animate attributeName="stroke-opacity" values=".9;.2;.9" dur="2.4s" repeatCount="indefinite"/></rect>{%- endif -%}
+<text x="{{ x + 10 }}" y="{{ y + 14 }}" font-size="9" fill="#9da7b3" letter-spacing=".3">{{ r.n | upper }}</text>
+<circle cx="{{ gx }}" cy="{{ cy }}" r="{{ rad }}" fill="none" stroke="#0d1117" stroke-width="5"/>
+{%- if r.ok -%}<circle cx="{{ gx }}" cy="{{ cy }}" r="{{ rad }}" fill="none" stroke="{{ c }}" stroke-width="5" stroke-linecap="round" stroke-dasharray="{{ '%.1f' | format(circ * frac) }} {{ circ }}" transform="rotate(-90 {{ gx }} {{ cy }})" filter="url(#glow2)"/>
+<text x="{{ gx }}" y="{{ cy + 5 }}" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">{{ '%.0f' | format(r.h) }}<tspan font-size="8">%</tspan></text>
+<text x="{{ tx }}" y="{{ cy }}" text-anchor="end" font-size="16" font-weight="700" fill="{{ tc(r.t) | trim }}">{{ '%.1f' | format(r.t) }}°</text>
+{%- if r.d is not none -%}{%- set dcol = dc(r.d) | trim -%}<rect x="{{ tx - 38 }}" y="{{ cy + 7 }}" width="38" height="14" rx="7" fill="{{ dcol }}" fill-opacity=".18"/><text x="{{ tx - 19 }}" y="{{ cy + 17 }}" text-anchor="middle" font-size="9.5" font-weight="700" fill="{{ dcol }}">{{ '▼' if r.d < 0 else '▲' }} {{ '%.1f' | format(r.d | abs) }}</text>{%- endif -%}
+{%- else -%}<text x="{{ gx }}" y="{{ cy + 5 }}" text-anchor="middle" font-size="12" fill="#6e7681">–</text><text x="{{ tx }}" y="{{ cy }}" text-anchor="end" font-size="13" fill="#6e7681">n/a</text>{%- endif -%}
+{%- endmacro -%}
+{%- macro floor_avg(f) -%}
+{%- set a = namespace(t=0, h=0, d=0, n=0, nd=0) -%}
+{%- for r in ns.rows if r.f == f and r.ok -%}{%- set a.t = a.t + r.t -%}{%- set a.h = a.h + r.h -%}{%- set a.n = a.n + 1 -%}{%- if r.d is not none -%}{%- set a.d = a.d + r.d -%}{%- set a.nd = a.nd + 1 -%}{%- endif -%}{%- endfor -%}
+{{ (a.t / a.n) if a.n > 0 else 'x' }}|{{ (a.h / a.n) if a.n > 0 else 'x' }}|{{ (a.d / a.nd) if a.nd > 0 else 'x' }}
+{%- endmacro -%}
+{%- macro ring(cx, cy, frac, col, txt, unit, lab) -%}
+<circle cx="{{ cx }}" cy="{{ cy }}" r="26" fill="none" stroke="#0d1117" stroke-width="7"/>
+<circle cx="{{ cx }}" cy="{{ cy }}" r="26" fill="none" stroke="{{ col }}" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ '%.1f' | format(163.4 * frac) }} 163.4" transform="rotate(-90 {{ cx }} {{ cy }})" filter="url(#glow2)"/>
+<text x="{{ cx }}" y="{{ cy + 5 }}" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">{{ txt }}<tspan font-size="9">{{ unit }}</tspan></text>
+<text x="{{ cx }}" y="{{ cy + 41 }}" text-anchor="middle" font-size="8.5" fill="#9da7b3" letter-spacing="1">{{ lab }}</text>
+{%- endmacro -%}
+{%- set W = 360 -%}{%- set H = 590 -%}
+{%- set svg -%}
+<svg xmlns="http://www.w3.org/2000/svg" width="{{ W }}" height="{{ H }}" viewBox="0 0 {{ W }} {{ H }}" font-family="Roboto,Arial,sans-serif" style="border-radius:16px">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1220"/><stop offset=".55" stop-color="#131b2c"/><stop offset="1" stop-color="#0d1117"/></linearGradient>
+<linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".10"/><stop offset="1" stop-color="#ffffff" stop-opacity=".02"/></linearGradient>
+<linearGradient id="roof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3548"/><stop offset="1" stop-color="#1a2233"/></linearGradient>
+<linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b2335"/><stop offset="1" stop-color="#141b29"/></linearGradient>
+<filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+<filter id="glow2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="{{ W }}" height="{{ H }}" rx="16" fill="url(#bg)"/>
+{% for p in [[30,18],[70,40],[120,14],[210,30],[250,12],[310,44],[340,22]] -%}<circle cx="{{ p[0] }}" cy="{{ p[1] }}" r="1" fill="#fff" opacity=".35"/>{% endfor %}
+<text x="16" y="26" font-size="15" font-weight="700" fill="#e6edf3">Climate</text><text x="16" y="41" font-size="9.5" fill="#8b949e">humidity · temperature · Δ abs. humidity</text>
+<rect x="{{ W - 128 }}" y="12" width="114" height="34" rx="17" fill="#ffffff" fill-opacity=".07" stroke="#ffffff" stroke-opacity=".15"/>
+<text x="{{ W - 113 }}" y="34" font-size="15">☁</text>
+<text x="{{ W - 92 }}" y="27" font-size="11" font-weight="700" fill="#e6edf3">{{ ('%.1f' | format(out_t) ~ '°') if out_t is not none else '–' }} · {{ ('%.0f' | format(out_h) ~ '%') if out_h is not none else '–' }}</text>
+<text x="{{ W - 92 }}" y="39" font-size="8.5" fill="#8b949e">Carport · {{ ('%.1f' | format(ao) ~ ' g/m³') if ao is not none else '–' }}</text>
+<polygon points="22,184 74,76 286,76 338,184" fill="url(#roof)" stroke="#3a455c" stroke-width="1.5" stroke-linejoin="round"/>
+<rect x="262" y="62" width="16" height="30" rx="2" fill="#2b3548" stroke="#3a455c"/><rect x="260" y="58" width="20" height="6" rx="2" fill="#3a455c"/>
+<polygon points="22,184 74,76 286,76 338,184" fill="none" stroke="#58a6ff" stroke-opacity=".25" stroke-width="5" filter="url(#glow)"/>
+{% for r in ns.rows if r.f == 'DG' -%}{{ tile(79.5 + loop.index0 * 103, 102, 98, 72, r) }}{% endfor %}
+{% for fl in [['OG', 188], ['EG', 276]] -%}
+<rect x="22" y="{{ fl[1] }}" width="316" height="84" rx="6" fill="url(#wall)" stroke="#3a455c" stroke-width="1.5"/>
+<text x="13" y="{{ fl[1] + 42 }}" font-size="9" font-weight="700" fill="#6e7681" letter-spacing="1.5" transform="rotate(-90 13,{{ fl[1] + 42 }})" text-anchor="middle">{{ fl[0] }}</text>
+{% for r in ns.rows if r.f == fl[0] -%}{{ tile(28 + loop.index0 * 103, fl[1] + 6, 98, 72, r) }}{% endfor %}
+{% endfor %}
+<rect x="8" y="364" width="344" height="4" rx="2" fill="#2d3748"/><ellipse cx="180" cy="372" rx="150" ry="6" fill="#000" opacity=".35"/>
+<rect x="16" y="392" width="328" height="124" rx="16" fill="#ffffff" fill-opacity=".06" stroke="#ffffff" stroke-opacity=".12"/>
+<text x="30" y="412" font-size="9.5" font-weight="700" fill="#8b949e" letter-spacing="2">HOUSE MEAN</text>
+{%- if hm_t is not none %}{{ ring(70, 454, ([[(hm_t - 15) / 13, 0] | max, 1] | min), '#ffa657', '%.1f' | format(hm_t), '°', 'TEMPERATURE') }}{% endif %}
+{%- if hm_h is not none %}{{ ring(150, 454, [[(hm_h - 30) / 50, 0] | max, 1] | min, zc(hm_h) | trim, '%.0f' | format(hm_h), '%', 'HUMIDITY') }}{% endif %}
+<line x1="196" x2="196" y1="406" y2="502" stroke="#ffffff" stroke-opacity=".12"/>
+<text x="208" y="412" font-size="8" fill="#6e7681" letter-spacing="1">FLOOR Ø</text>
+{% for f in ['DG', 'OG', 'EG'] -%}
+{%- set yy = 442 + loop.index0 * 26 -%}
+{%- set v = floor_avg(f).split('|') -%}
+<text x="208" y="{{ yy }}" font-size="9" font-weight="700" fill="#8b949e">{{ f }}</text>
+{%- if v[0] != 'x' -%}{%- set fh = v[1] | float(50) -%}<text x="234" y="{{ yy }}" font-size="12" font-weight="600" fill="#e6edf3">{{ '%.1f' | format(v[0] | float(0)) }}°</text><text x="278" y="{{ yy }}" font-size="12" font-weight="700" fill="{{ zc(fh) | trim }}">{{ '%.0f' | format(fh) }}%</text>
+{%- if v[2] != 'x' -%}{%- set fd = v[2] | float(0) -%}<text x="334" y="{{ yy }}" text-anchor="end" font-size="10" font-weight="700" fill="{{ dc(fd) | trim }}">{{ '▼' if fd < 0 else '▲' }} {{ '%.1f' | format(fd | abs) }}</text>{%- endif -%}
+{%- else -%}<text x="234" y="{{ yy }}" font-size="12" fill="#6e7681">n/a</text>{%- endif -%}
+{% endfor %}
+{% for l in [['#58a6ff', 'dry &lt;40'], ['#3fb950', 'ok 40–58'], ['#e3b341', 'humid 58–60'], ['#f85149', 'too humid &gt;60']] -%}
+<circle cx="{{ 20 + loop.index0 * 86 }}" cy="540" r="4" fill="{{ l[0] }}"/><text x="{{ 29 + loop.index0 * 86 }}" y="543" font-size="8.5" fill="#9da7b3">{{ l[1] }}</text>
+{% endfor %}
+<text x="16" y="562" font-size="8.5" fill="#6e7681">▼ airing dries the room (outside is drier) · ▲ airing would add moisture</text>
+</svg>
+{%- endset -%}
+![Climate](data:image/svg+xml;utf8,{{ svg | urlencode }})
