@@ -21,12 +21,14 @@ import urllib.request
 HA_URL = (os.environ.get("HA_URL") or "http://supervisor/core").rstrip("/")
 HA_TOKEN = os.environ.get("HA_TOKEN") or os.environ["SUPERVISOR_TOKEN"]
 OUT_DIR = os.path.abspath(os.environ.get("OUT_DIR", "/config/www"))
-WIDTH = int(os.environ.get("WIDTH", "720"))
+WIDTH = int(os.environ.get("WIDTH", "1440"))  # pixel width of the PNG (the card is 360 units wide)
 TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "climate.j2")
 INTERVAL = int(os.environ.get("INTERVAL", "300"))
 try:  # add-on options (Settings > Add-ons > Climate PNG > Configuration)
     with open("/data/options.json", encoding="utf-8") as f:
-        INTERVAL = int(json.load(f).get("interval", INTERVAL))
+        _opts = json.load(f)
+    INTERVAL = int(_opts.get("interval", INTERVAL))
+    WIDTH = int(_opts.get("width", WIDTH))
 except (OSError, ValueError):
     pass
 

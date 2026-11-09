@@ -1,5 +1,5 @@
 name: Climate PNG
-version: "1.0.3"
+version: "1.0.4"
 slug: climate_png
 description: Renders the Climate house card as /config/www/climate.png (for a camera / Android widget)
 arch:
@@ -16,5 +16,7 @@ map:
     path: /config
 options:
   interval: 300
+  width: 1440
 schema:
   interval: int(30,3600)
+  width: int(360,3000)
